@@ -2,3 +2,4 @@ __pycache__/
 *.root
 *.npz
 runs/
+cluster/pilot_batch/

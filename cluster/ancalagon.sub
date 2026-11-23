@@ -1,0 +1,24 @@
+# Ancalagon batch on the TAMU cyclotron pool. Submit from c102:
+#   condor_submit batch=<batch> [jobsfile=jobs_failed.txt] ancalagon.sub
+# with $DRAGON_NN/runs/<batch>/jobs.txt holding one job per line (see
+# run_ancalagon_job.sh). Job NAMEs in jobs.txt must start with "<batch>/".
+DRAGON_NN             = /data/pagroup/pa02/padsley/dragon_nn
+universe              = vanilla
+executable            = $(DRAGON_NN)/cluster/run_ancalagon_job.sh
+transfer_executable   = False
+arguments             = "$(name) $(mode) $(input) $(nevents) $(seed) $(pressure) $(gasfile) $(extra)"
+should_transfer_files = NO
+getenv                = False
+# Both FileSystemDomains mount /home/pagroup and /data/pagroup.
+requirements          = (TARGET.Arch == "X86_64") && (TARGET.OpSys == "LINUX") && (TARGET.FileSystemDomain == "tamu.edu" || TARGET.FileSystemDomain == "cyclotron.tamu.edu")
+request_cpus          = 1
+request_memory        = 1024
+JobBatchName          = nidhogg_$(batch)
+# One event log per cluster (per-job logs over NFS overloaded c102 before).
+log                   = $(DRAGON_NN)/logs/$(batch)_$(Cluster).condorlog
+output                = $(DRAGON_NN)/logs/$(batch)_$(Cluster)_$(Process).out
+error                 = $(DRAGON_NN)/logs/$(batch)_$(Cluster)_$(Process).err
+# Limits concurrent shadows on c102; keep <=100 new starts per 5-10 min.
+max_materialize       = 100
+# jobsfile defaults to jobs.txt; resubmit failures with jobsfile=jobs_failed.txt
+queue name,mode,input,nevents,seed,pressure,gasfile,extra from $(DRAGON_NN)/runs/$(batch)/$(jobsfile:jobs.txt)
