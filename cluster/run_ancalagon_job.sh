@@ -7,7 +7,7 @@
 #   GASFILE  library: reaction file whose TARG card picks H2/He; reaction: "-"
 #   EXTRA    "-" or comma-separated KEY=VALUE env settings
 # Output goes to $DRAGON_NN/runs/<batch>/<NAME>/ (NAME may contain one "/"):
-#   out.root (renamed from out.root.partial only on success), run.log,
+#   out.root (renamed from out.partial.root only on success), run.log,
 #   status.txt (host, cpu, start/end, wall seconds, exit code).
 # A job whose status.txt already says exit=0 is skipped, so a batch can be
 # resubmitted as a whole after failures.
@@ -22,9 +22,9 @@ if grep -qs "^exit=0$" "$DIR/status.txt"; then
 fi
 cd "$DIR"
 export TMPDIR=$DIR
-rm -f out.root out.root.partial
+rm -f out.root out.partial.root
 
-export OUTPUT_MODE=compact OUTPUT_FILE=out.root.partial TRAJ_QUIET=1 EVENT_PRINT=0
+export OUTPUT_MODE=compact OUTPUT_FILE=out.partial.root TRAJ_QUIET=1 EVENT_PRINT=0
 export RANDOM_SEED=$SEED GAS_PRESSURE_TORR=$PRESSURE GAS_TEMPERATURE_K=300
 if [ "$EXTRA" != "-" ]; then
   IFS=',' read -ra KV <<< "$EXTRA"
@@ -46,7 +46,7 @@ T0=$(date +%s)
 RC=$?
 T1=$(date +%s)
 if [ $RC -eq 0 ]; then
-  if [ -s out.root.partial ]; then mv out.root.partial out.root; else RC=3; fi
+  if [ -s out.partial.root ]; then mv out.partial.root out.root; else RC=3; fi
 fi
 { cat status.txt.partial; cat time.txt 2>/dev/null; echo "end=$(date -Is)"; echo "wall_s=$((T1-T0))"
   echo "exit=$RC"; } > status.txt
