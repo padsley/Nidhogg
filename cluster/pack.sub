@@ -1,0 +1,21 @@
+# Pack gamma-library outputs into flat arrays (pack_library.py). From c102:
+#   condor_submit batch=<batch> pack.sub
+# with $DRAGON_NN/packed/<batch>/packlist.txt holding one comma-separated tag
+# list per line (make_packlist.py). Finished tags are skipped, so it can be
+# resubmitted as a whole.
+DRAGON_NN             = /data/pagroup/pa02/padsley/dragon_nn
+universe              = vanilla
+executable            = $(DRAGON_NN)/pyenv/bin/python
+transfer_executable   = False
+arguments             = "$(DRAGON_NN)/cluster/pack_library.py $(batch) $(tags)"
+should_transfer_files = NO
+getenv                = False
+requirements          = (TARGET.Arch == "X86_64") && (TARGET.OpSys == "LINUX") && (TARGET.FileSystemDomain == "tamu.edu" || TARGET.FileSystemDomain == "cyclotron.tamu.edu")
+request_cpus          = 1
+request_memory        = 1024
+JobBatchName          = nidhogg_pack_$(batch)
+log                   = $(DRAGON_NN)/logs/pack_$(batch)_$(Cluster).condorlog
+output                = $(DRAGON_NN)/logs/pack_$(batch)_$(Cluster)_$(Process).out
+error                 = $(DRAGON_NN)/logs/pack_$(batch)_$(Cluster)_$(Process).err
+max_materialize       = 40
+queue tags from $(DRAGON_NN)/packed/$(batch)/packlist.txt

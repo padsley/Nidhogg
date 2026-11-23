@@ -3,3 +3,4 @@ __pycache__/
 *.npz
 runs/
 cluster/pilot_batch/
+cluster/*_batch/
