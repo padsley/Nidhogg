@@ -4,3 +4,4 @@ __pycache__/
 runs/
 cluster/pilot_batch/
 cluster/*_batch/
+data/

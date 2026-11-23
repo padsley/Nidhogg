@@ -1,0 +1,32 @@
+# Default detector response for S1805 (39K(p,g)40Ca, DRAGON BGO array).
+#
+# PROVISIONAL. No per-crystal resolution or threshold has been measured for
+# S1805 (search of ~/data/DRAGON_BGO_Calibration and its project memory,
+# 2026-11-23). Replace these with measured values when they exist; every
+# field can be a single number or a 30-element list (crystal IDs 1-30, the
+# Ancalagon numbering; the DAQ-to-Ancalagon channel map is assumed to be
+# identity, but this has not been verified).
+#
+# Sources for the provisional numbers:
+#  - resolution: GEANT3 gudigi.f:405 e0 convolution, FWHM = 0.1733*sqrt(E),
+#    i.e. sigma = 0.0737*sqrt(E) (array-wide; origin not documented). The
+#    S1805 fits' sigma^2 = (0.02102 E)^2 + 0.01416^2 E was fitted to GEANT3
+#    peak widths that already include Doppler broadening, so it must NOT be
+#    used on Ancalagon output, which simulates Doppler itself.
+#  - threshold: GEANT3 gudigi.f:367-374 drops crystal hits below 0.1 MeV;
+#    width chosen as 0.01 MeV (unknown). The effective E_gamma1 analysis
+#    threshold (~1.4 MeV on the in-situ scale) is an observable cut applied
+#    at fit time, not part of this file.
+#  - gain: 1.0. The x1.09 SCALE_CORRECTION is a symptom of the 40K/208Tl
+#    calibration mislabelling (BGO calibration project memory), so it is not
+#    applied here.
+name: s1805
+provisional: true
+resolution:
+  a: 0.0737
+  b: 0.0
+  c: 0.0
+threshold:
+  e0: 0.1
+  width: 0.01
+gain: 1.0
