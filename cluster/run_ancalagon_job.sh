@@ -26,6 +26,8 @@ rm -f out.root out.partial.root
 
 export OUTPUT_MODE=compact OUTPUT_FILE=out.partial.root TRAJ_QUIET=1 EVENT_PRINT=0
 export RANDOM_SEED=$SEED GAS_PRESSURE_TORR=$PRESSURE GAS_TEMPERATURE_K=300
+# Cascade-independent separator tune (Ancalagon 2026-11-24); EXTRA can override.
+export RETUNE_NO_KICK=1 RETUNE_EVENTS=1000
 if [ "$EXTRA" != "-" ]; then
   IFS=',' read -ra KV <<< "$EXTRA"
   for kv in "${KV[@]}"; do export "$kv"; done
