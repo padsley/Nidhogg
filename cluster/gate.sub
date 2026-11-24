@@ -11,7 +11,7 @@ should_transfer_files = NO
 getenv                = False
 requirements          = (TARGET.Arch == "X86_64") && (TARGET.OpSys == "LINUX") && (TARGET.FileSystemDomain == "tamu.edu" || TARGET.FileSystemDomain == "cyclotron.tamu.edu")
 request_cpus          = 1
-request_memory        = 1800
+request_memory        = 1200
 JobBatchName          = nidhogg_gate_$(batch)
 log                   = $(DRAGON_NN)/logs/gate_$(batch)_$(Cluster).condorlog
 output                = $(DRAGON_NN)/logs/gate_$(batch)_$(Cluster)_$(Process).out

@@ -2,7 +2,7 @@
 """Factorization gate over many full-cascade runs (cluster job).
 
   python3 scripts/run_gate.py PACKED_LIB OUT_DIR RUN_DIR [RUN_DIR ...]
-        [--response responses/s1805.yaml] [--max-draws 500000] [--max-events 500000]
+        [--response responses/s1805.yaml] [--max-draws 200000] [--max-events 200000]
 
 For each RUN_DIR (containing out.root from an OUTPUT_MODE=compact reaction
 run), assemble K = max(1, max_draws // n) events per real event from the
@@ -74,8 +74,8 @@ def main() -> int:
     ap.add_argument("out_dir")
     ap.add_argument("run_dirs", nargs="+")
     ap.add_argument("--response", default=os.path.join(os.path.dirname(__file__), "..", "responses", "s1805.yaml"))
-    ap.add_argument("--max-draws", type=int, default=500_000)
-    ap.add_argument("--max-events", type=int, default=500_000,
+    ap.add_argument("--max-draws", type=int, default=200_000)
+    ap.add_argument("--max-events", type=int, default=200_000,
                     help="use at most this many events of each run (memory: slots are 1.4-1.8 GB)")
     ap.add_argument("--seed", type=int, default=12345)
     a = ap.parse_args()
