@@ -5,7 +5,7 @@
 # resubmitted as a whole.
 DRAGON_NN             = /data/pagroup/pa02/padsley/dragon_nn
 universe              = vanilla
-executable            = $(DRAGON_NN)/pyenv/bin/python
+executable            = $(DRAGON_NN)/cluster/run_py.sh
 transfer_executable   = False
 arguments             = "$(DRAGON_NN)/cluster/pack_library.py $(batch) $(tags)"
 should_transfer_files = NO

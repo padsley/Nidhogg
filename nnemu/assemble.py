@@ -45,8 +45,12 @@ def assemble(lib: GammaLibrary, gamma_e: list, z: np.ndarray, beta: np.ndarray,
     z_grid/beta_grid: planes to interpolate between (default: all library
              planes). Restrict when the library is not a full product grid.
     Returns (deposits (N,30) float32 summed per crystal, gamma_event (M,),
-    gamma_cos_theta (M,), gamma_phi (M,)): the last three give the emission
-    direction of each assembled gamma (for the recoil kick).
+    gamma_cos_theta (M,), gamma_phi (M,), lib_var_factor): the middle three
+    give the emission direction of each assembled gamma (for the recoil
+    kick). lib_var_factor = 1 + sum_u m_u^2 / (L_u * sum_u m_u), where m_u is
+    the number of draws from cell u and L_u its size. It is the approximate
+    inflation of the assembled histogram's variance from reusing a finite
+    library.
     """
     n = len(gamma_e)
     z_grid = lib.z_values if z_grid is None else np.asarray(z_grid, float)
@@ -81,9 +85,13 @@ def assemble(lib: GammaLibrary, gamma_e: list, z: np.ndarray, beta: np.ndarray,
     inv = inv.ravel()
     order = np.argsort(inv, kind="stable")
     bounds = np.r_[0, np.cumsum(np.bincount(inv, minlength=len(uniq)))]
+    m_sq_over_l = 0.0
     for u, (e, zz, bb) in enumerate(uniq):
         gi = order[bounds[u]:bounds[u + 1]]
+        ip, _ = lib.index[lib._key(e, zz, bb)]
+        m_sq_over_l += len(gi) ** 2 / lib.parts[ip].events_per_cell
         draw, cry, ed, cs, ph = lib.draw(e, zz, bb, len(gi), rng)
         g_cos[gi], g_phi[gi] = cs, ph
         np.add.at(dep, (g_event[gi][draw], cry.astype(np.int64) - 1), ed * scale[gi][draw])
-    return dep, g_event, g_cos, g_phi
+    lib_var_factor = 1.0 + m_sq_over_l / max(len(g_e), 1)
+    return dep, g_event, g_cos, g_phi, lib_var_factor

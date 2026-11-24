@@ -44,9 +44,11 @@ def main() -> int:
     ap.add_argument("--beta-grid", type=float, nargs="*", default=None)
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--max-events", type=int, default=None)
+    ap.add_argument("--no-lib-noise", dest="lib_noise", action="store_false",
+                    help="ignore library-resampling variance (default: include it, "
+                         "computed from actual per-cell draw counts)")
     ap.add_argument("--lib-events", type=float, default=None,
-                    help="events per library cell; adds the library-resampling variance "
-                         "(factor 1 + n*K/lib_events) to the assembled side")
+                    help="override: assume a single cell of this size (factor 1 + n*K/lib_events)")
     a = ap.parse_args()
 
     rng = np.random.default_rng(a.seed)
@@ -60,14 +62,14 @@ def main() -> int:
 
     lib = GammaLibrary(a.packed_dir)
     reps = np.tile(np.arange(n), a.k)
-    dep_asm, *_ = assemble(lib, [ge[i] for i in reps], z[reps], b[reps], rng,
+    dep_asm, _, _, _, lib_f = assemble(lib, [ge[i] for i in reps], z[reps], b[reps], rng,
                            z_grid=a.z_grid, beta_grid=a.beta_grid)
 
     responses = [("raw", None)]
     if a.response:
         responses.append((os.path.basename(a.response), Response.load(a.response)))
     print(f"{os.path.basename(os.path.dirname(a.run_root)) or a.run_root}: {n} events, K={a.k}, "
-          f"z {z.min():.2f}..{z.max():.2f}, beta {b.mean():.5f}")
+          f"z {z.min():.2f}..{z.max():.2f}, beta {b.mean():.5f}, library variance factor {lib_f:.2f}")
     worst = 0.0
     for rname, resp in responses:
         if resp is None:
@@ -77,7 +79,7 @@ def main() -> int:
             ha = histograms(resp.apply(dep_asm, rng), E_EDGES, C_EDGES)
         line = []
         for head in ["e_max", "e_sum", "mult", "crystal_max", "per_crystal"]:
-            f = 1.0 + (n * a.k / a.lib_events if a.lib_events else 0.0)
+            f = (1.0 + n * a.k / a.lib_events) if a.lib_events else (lib_f if a.lib_noise else 1.0)
             chi2, ndf, pull = compare_counts(hf[head], n, ha[head], n * a.k, b_extra_var_factor=f)
             worst = max(worst, chi2 / max(ndf, 1))
             line.append(f"{head} {chi2:7.1f}/{ndf:<5d}")

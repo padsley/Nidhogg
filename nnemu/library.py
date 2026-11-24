@@ -9,36 +9,46 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
-
 import numpy as np
 
 
-@dataclass
 class Part:
-    path: str
-    cells: np.ndarray        # (n_cells, 3)
-    events_per_cell: int
-    hit_offset: np.ndarray   # (n_events+1,) uint32, memmap
-    crystal: np.ndarray      # (n_hits,) uint8, memmap
-    edep: np.ndarray         # (n_hits,) float32, memmap
-    cos_theta: np.ndarray    # (n_events,) float16, memmap
-    phi: np.ndarray          # (n_events,) float16, memmap
+    """One packed part. The memmapped arrays are opened lazily and can be
+    released: each memmap holds a file descriptor, and a full library has
+    hundreds of parts x 5 arrays, more than the usual 1024-fd limit."""
+
+    ARRAYS = ("hit_offset", "crystal", "edep", "cos_theta", "phi")
+
+    def __init__(self, path: str, cells: np.ndarray, events_per_cell: int):
+        self.path, self.cells, self.events_per_cell = path, cells, events_per_cell
+        self._arr: dict | None = None
+
+    def arrays(self) -> dict:
+        if self._arr is None:
+            self._arr = {k: np.load(os.path.join(self.path, k + ".npy"), mmap_mode="r") for k in self.ARRAYS}
+        return self._arr
+
+    def release(self) -> None:
+        self._arr = None
+
+    @property
+    def is_open(self) -> bool:
+        return self._arr is not None
 
 
 class GammaLibrary:
-    def __init__(self, packed_dir: str):
+    def __init__(self, packed_dir: str, max_open_parts: int = 64):
+        self.max_open_parts = max_open_parts
+        self._open_order: list[int] = []
         self.parts: list[Part] = []
         self.index: dict[tuple[float, float, float], tuple[int, int]] = {}
         for name in sorted(os.listdir(packed_dir)):
             d = os.path.join(packed_dir, name)
             if not os.path.isfile(os.path.join(d, "DONE")):
                 continue
-            meta = json.load(open(os.path.join(d, "meta.json")))
-            ld = lambda f: np.load(os.path.join(d, f), mmap_mode="r")  # noqa: E731
-            p = Part(d, np.load(os.path.join(d, "cells.npy")), meta["events_per_cell"],
-                     ld("hit_offset.npy"), ld("crystal.npy"), ld("edep.npy"),
-                     ld("cos_theta.npy"), ld("phi.npy"))
+            with open(os.path.join(d, "meta.json")) as fm:
+                meta = json.load(fm)
+            p = Part(d, np.load(os.path.join(d, "cells.npy")), meta["events_per_cell"])
             ip = len(self.parts)
             self.parts.append(p)
             for ic, (e, z, b) in enumerate(p.cells):
@@ -67,14 +77,24 @@ class GammaLibrary:
         (event_of_hit, crystal, edep, cos_theta, phi): hits are labelled by
         draw number 0..n-1."""
         ip, ic = self.index[self._key(e, z, b)]
-        p = self.parts[ip]
-        ev = ic * p.events_per_cell + rng.integers(0, p.events_per_cell, n)
-        lo = p.hit_offset[ev].astype(np.int64)
-        hi = p.hit_offset[ev + 1].astype(np.int64)
+        part = self.parts[ip]
+        p = self._open(ip)
+        ev = ic * part.events_per_cell + rng.integers(0, part.events_per_cell, n)
+        lo = p["hit_offset"][ev].astype(np.int64)
+        hi = p["hit_offset"][ev + 1].astype(np.int64)
         cnt = hi - lo
         draw_of_hit = np.repeat(np.arange(n), cnt)
         # hit indices: lo[j] + (0..cnt[j]-1)
         starts = np.repeat(lo - np.r_[0, np.cumsum(cnt)[:-1]], cnt)
         hit_idx = starts + np.arange(cnt.sum())
-        return (draw_of_hit, np.asarray(p.crystal[hit_idx]), np.asarray(p.edep[hit_idx]),
-                np.asarray(p.cos_theta[ev], dtype=np.float32), np.asarray(p.phi[ev], dtype=np.float32))
+        return (draw_of_hit, np.asarray(p["crystal"][hit_idx]), np.asarray(p["edep"][hit_idx]),
+                np.asarray(p["cos_theta"][ev], dtype=np.float32), np.asarray(p["phi"][ev], dtype=np.float32))
+
+    def _open(self, ip: int) -> dict:
+        """Arrays of part ip, keeping at most max_open_parts open (LRU)."""
+        if ip in self._open_order:
+            self._open_order.remove(ip)
+        self._open_order.append(ip)
+        while len(self._open_order) > self.max_open_parts:
+            self.parts[self._open_order.pop(0)].release()
+        return self.parts[ip].arrays()
