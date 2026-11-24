@@ -1,15 +1,16 @@
 # Factorization gate (scripts/run_gate.py) over a validation batch. From c102:
-#   condor_submit batch=val_v1 lib=lib_v1 gate.sub
+#   condor_submit batch=val_v1 lib=lib_v1 [extra="--acceptance-maps DIR --manifest M"] gate.sub
 # with $DRAGON_NN/gate/<batch>/runlist.txt holding one space-separated list of
 # run directories per line. Finished runs (existing JSON) are skipped.
 DRAGON_NN             = /data/pagroup/pa02/padsley/dragon_nn
 universe              = vanilla
 executable            = $(DRAGON_NN)/cluster/run_py.sh
 transfer_executable   = False
-arguments             = "$(DRAGON_NN)/nidhogg/scripts/run_gate.py $(DRAGON_NN)/packed/$(lib) $(DRAGON_NN)/gate/$(batch) $(runs)"
+arguments             = "$(DRAGON_NN)/nidhogg/scripts/run_gate.py $(DRAGON_NN)/packed/$(lib) $(DRAGON_NN)/gate/$(batch) $(runs) $(extra:)"
 should_transfer_files = NO
 getenv                = False
-requirements          = (TARGET.Arch == "X86_64") && (TARGET.OpSys == "LINUX") && (TARGET.FileSystemDomain == "tamu.edu" || TARGET.FileSystemDomain == "cyclotron.tamu.edu")
+# c104/c109 are old Opterons: the venv numpy wheels die there with SIGILL.
+requirements          = (TARGET.Arch == "X86_64") && (TARGET.OpSys == "LINUX") && (TARGET.FileSystemDomain == "tamu.edu" || TARGET.FileSystemDomain == "cyclotron.tamu.edu") && (TARGET.Machine != "c104.cyclotron.tamu.edu") && (TARGET.Machine != "c109.cyclotron.tamu.edu")
 request_cpus          = 1
 request_memory        = 1200
 JobBatchName          = nidhogg_gate_$(batch)

@@ -1,0 +1,20 @@
+# Generic Python jobs with the dragon_nn venv. From c102:
+#   condor_submit name=<label> list=<file of argument lines> [mem=<MB>] py.sub
+# Each line of <file> is the full argument string (script path first).
+DRAGON_NN             = /data/pagroup/pa02/padsley/dragon_nn
+universe              = vanilla
+executable            = $(DRAGON_NN)/cluster/run_py.sh
+transfer_executable   = False
+arguments             = "$(args)"
+should_transfer_files = NO
+getenv                = False
+# c104/c109 are old Opterons: the venv numpy wheels die there with SIGILL.
+requirements          = (TARGET.Arch == "X86_64") && (TARGET.OpSys == "LINUX") && (TARGET.FileSystemDomain == "tamu.edu" || TARGET.FileSystemDomain == "cyclotron.tamu.edu") && (TARGET.Machine != "c104.cyclotron.tamu.edu") && (TARGET.Machine != "c109.cyclotron.tamu.edu")
+request_cpus          = 1
+request_memory        = $(mem:1200)
+JobBatchName          = nidhogg_$(name)
+log                   = $(DRAGON_NN)/logs/$(name)_$(Cluster).condorlog
+output                = $(DRAGON_NN)/logs/$(name)_$(Cluster)_$(Process).out
+error                 = $(DRAGON_NN)/logs/$(name)_$(Cluster)_$(Process).err
+max_materialize       = 40
+queue args from $(list)

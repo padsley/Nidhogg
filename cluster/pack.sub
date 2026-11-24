@@ -10,7 +10,8 @@ transfer_executable   = False
 arguments             = "$(DRAGON_NN)/cluster/pack_library.py $(batch) $(tags)"
 should_transfer_files = NO
 getenv                = False
-requirements          = (TARGET.Arch == "X86_64") && (TARGET.OpSys == "LINUX") && (TARGET.FileSystemDomain == "tamu.edu" || TARGET.FileSystemDomain == "cyclotron.tamu.edu")
+# c104/c109 are old Opterons: the venv numpy wheels die there with SIGILL.
+requirements          = (TARGET.Arch == "X86_64") && (TARGET.OpSys == "LINUX") && (TARGET.FileSystemDomain == "tamu.edu" || TARGET.FileSystemDomain == "cyclotron.tamu.edu") && (TARGET.Machine != "c104.cyclotron.tamu.edu") && (TARGET.Machine != "c109.cyclotron.tamu.edu")
 request_cpus          = 1
 request_memory        = 1024
 JobBatchName          = nidhogg_pack_$(batch)

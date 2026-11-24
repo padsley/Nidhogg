@@ -90,3 +90,35 @@ class AcceptanceModel:
     def load(path) -> "AcceptanceModel":
         with open(path, "rb") as f:
             return pickle.load(f)
+
+
+class AcceptanceMap:
+    """Acceptance for ONE experimental condition (reaction, pressure, beam
+    energy, separator tune), learned from a recoil-only scan (Ancalagon
+    RECOIL_SCAN): P(transmitted | theta_x, theta_y, delta, z). The scan
+    samples kicks uniformly, so the sharp acceptance edges and corners are
+    densely covered. Kicks outside the scanned box count as not transmitted.
+    """
+
+    def __init__(self, theta_max: float, delta_max: float, **kw):
+        from sklearn.ensemble import HistGradientBoostingClassifier
+        self.theta_max, self.delta_max = theta_max, delta_max
+        params = dict(max_iter=600, learning_rate=0.15, max_leaf_nodes=127, min_samples_leaf=50,
+                      max_bins=255, early_stopping=True, validation_fraction=0.1, n_iter_no_change=20,
+                      random_state=0)
+        params.update(kw)
+        self.clf = HistGradientBoostingClassifier(**params)
+
+    def fit(self, F, y):
+        """F: (N,4) theta_x, theta_y, delta, z."""
+        self.clf.fit(F, y.astype(int))
+        return self
+
+    def predict(self, F) -> np.ndarray:
+        F = np.asarray(F, dtype=np.float32)
+        inside = ((np.abs(F[:, 0]) <= self.theta_max) & (np.abs(F[:, 1]) <= self.theta_max)
+                  & (np.abs(F[:, 2]) <= self.delta_max))
+        p = np.zeros(len(F))
+        if inside.any():
+            p[inside] = self.clf.predict_proba(F[inside])[:, 1]
+        return p

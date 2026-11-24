@@ -17,6 +17,7 @@ and the recoil fraction.
 import argparse
 import json
 import os
+import pickle
 import sys
 import time
 
@@ -70,7 +71,10 @@ def gate_one(run_dir, lib, responses, max_draws, max_events, rng, acceptance=Non
         e_per_u = float(np.mean(ak.to_numpy(tr["beamKeMeV"][:n]))) / NUC[beam][1]
         X = np.hstack([recoil_features(rx, ry, rz, p0[reps], z[reps]),
                        condition_columns(len(reps), manifest["pressure"], Ar, Zr, e_per_u, targ == "4He")])
-        w_model = acceptance.predict(X.astype(np.float32))
+        if hasattr(acceptance, "theta_max"):      # per-condition AcceptanceMap
+            w_model = acceptance.predict(X[:, :4])
+        else:                                      # generic AcceptanceModel
+            w_model = acceptance.predict(X.astype(np.float32))
     del run, tr
     res = dict(run=os.path.basename(os.path.normpath(run_dir)), n=n, k=k, lib_var_factor=lib_f,
                z_mean=float(z.mean()), z_sd=float(z.std()), beta=float(b.mean()),
@@ -117,7 +121,9 @@ def main() -> int:
                     help="use at most this many events of each run (memory: slots are 1.4-1.8 GB)")
     ap.add_argument("--seed", type=int, default=12345)
     ap.add_argument("--acceptance", default=None, help="AcceptanceModel pickle: adds gated_model comparisons")
-    ap.add_argument("--manifest", default=None, help="batch manifest.json (needed with --acceptance)")
+    ap.add_argument("--acceptance-maps", default=None,
+                    help="directory of per-condition AcceptanceMap pickles (<reaction>_P<p>_z<z>.pkl)")
+    ap.add_argument("--manifest", default=None, help="batch manifest.json (needed with --acceptance*)")
     ap.add_argument("--tag", default="", help="suffix for output JSON names")
     a = ap.parse_args()
     os.makedirs(a.out_dir, exist_ok=True)
@@ -135,8 +141,14 @@ def main() -> int:
             continue
         try:
             t1 = time.time()
+            accept = acc
+            if a.acceptance_maps:
+                m = man[name]
+                cond = f"{m['reaction']}_P{m['pressure']:g}_z{m['z_aim']:+.1f}"
+                with open(os.path.join(a.acceptance_maps, cond + ".pkl"), "rb") as fm:
+                    accept = pickle.load(fm)
             r = gate_one(rd, lib, responses, a.max_draws, a.max_events, np.random.default_rng(a.seed + i),
-                         acceptance=acc, manifest=man.get(name))
+                         acceptance=accept, manifest=man.get(name))
             r["seconds"] = time.time() - t1
             with open(out + ".partial", "w") as f:
                 json.dump(r, f)
