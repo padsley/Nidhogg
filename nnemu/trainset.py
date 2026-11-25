@@ -44,16 +44,17 @@ RANGES = dict(
 )
 MULT_WEIGHTS = np.array([0.25, 0.22, 0.20, 0.15, 0.11, 0.07])
 P_OPEN = 0.3
+P_CORNER = 0.15
 
 
-def sample_acceptance(rng, n):
+def sample_acceptance(rng, n, p_open=None):
     lo, hi, lg = RANGES["acc_lo"], RANGES["acc_hi"], RANGES["acc_log"]
     u = rng.random((n, len(lo)))
     lin = lo + (hi - lo) * u
     log = np.exp(np.log(lo[lg]) + (np.log(hi[lg]) - np.log(lo[lg])) * u[:, lg])
     acc = lin.copy()
     acc[:, lg] = log
-    acc[rng.random(n) < P_OPEN] = OPEN_ACCEPTANCE
+    acc[rng.random(n) < (P_OPEN if p_open is None else p_open)] = OPEN_ACCEPTANCE
     return acc
 
 
@@ -63,9 +64,9 @@ def sample_conditions(rng: np.random.Generator, n: int) -> dict:
     gammas = np.zeros((n, MAX_GAMMAS))
     for i in range(n):
         lo = max(R["e_total"][0], R["e_min_gamma"] * m[i] * 1.5)
-        # 70% uniform in [1, 15] MeV (typical DRAGON cascade budgets), 30%
-        # log-uniform from lo (dense coverage of low-energy paths)
-        if rng.random() < 0.7:
+        # 50% uniform in [1, 15] MeV (typical DRAGON cascade budgets), 50%
+        # log-uniform from lo (v1 under-covered low-energy paths: o15ag worst)
+        if rng.random() < 0.5:
             etot = rng.uniform(max(1.0, lo), R["e_total"][1])
         else:
             etot = np.exp(rng.uniform(np.log(lo), np.log(R["e_total"][1])))
@@ -76,8 +77,19 @@ def sample_conditions(rng: np.random.Generator, n: int) -> dict:
         gammas[i, :m[i]] = np.sort(g)[::-1]
     beta = rng.uniform(*R["beta"], n)
     A = rng.uniform(*R["recoil_A"], n)
+    # Corner regime (v1 weakest): 1-2 hard gammas, light recoil, real window.
+    corner = rng.random(n) < P_CORNER
+    for i in np.where(corner)[0]:
+        k = 1 + int(rng.random() < 0.4)
+        e = rng.uniform(6.0, 15.0)
+        g = [e] if k == 1 else sorted(np.diff(np.r_[0.0, np.sort(rng.uniform(0.15 * e, 0.85 * e, 1)), e]), reverse=True)
+        m[i] = k
+        gammas[i] = 0.0
+        gammas[i, :k] = g
+        A[i] = rng.uniform(12.0, 28.0)
     p0 = beta / np.sqrt(1 - beta**2) * A * AMU_MEV
     acc = sample_acceptance(rng, n)
+    acc[corner] = sample_acceptance(rng, int(corner.sum()), p_open=0.0)
     return dict(mult=m, gammas=gammas, z=rng.uniform(*R["z"], n), beta=beta, p0=p0, recoil_A=A,
                 acceptance=acc, res_scale=rng.uniform(*R["res_scale"], n),
                 thr_shift=rng.uniform(*R["thr_shift"], n))

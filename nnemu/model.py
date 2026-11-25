@@ -108,8 +108,12 @@ class Emulator(nn.Module):
         self.other = nn.Linear(hidden, 2)                       # e_max, e_sum "other" logits
         self.crystal_emb = nn.Embedding(N_CRYSTALS, crystal_emb)
         self.pc_other = nn.Linear(hidden + crystal_emb, 1)
-        self.mult = nn.Sequential(nn.Linear(hidden, hidden), nn.SiLU(), nn.Linear(hidden, N_MULT + 1))
-        self.cmax = nn.Sequential(nn.Linear(hidden, hidden), nn.SiLU(), nn.Linear(hidden, N_CRYSTALS + 1))
+        self.mult = nn.Sequential(nn.Linear(hidden, hidden), nn.SiLU(), nn.Linear(hidden, hidden), nn.SiLU(),
+                                  nn.Linear(hidden, N_MULT + 1))
+        # hit pattern: one query per crystal (crystal embedding + trunk), plus "other"
+        self.cmax_q = nn.Sequential(nn.Linear(hidden + crystal_emb, dec_hidden), nn.SiLU(),
+                                    nn.Linear(dec_hidden, dec_hidden), nn.SiLU(), nn.Linear(dec_hidden, 1))
+        self.cmax_other = nn.Linear(hidden, 1)
 
     def embed(self, gammas, context):
         mask = gammas > 0
@@ -151,7 +155,9 @@ class Emulator(nn.Module):
         lo = self.pc_other(torch.cat([h[:, None].expand(B, nK, -1), emb[None].expand(B, nK, -1)], -1))
         out["per_crystal"] = F.log_softmax(torch.cat([lc, lo], 2), 2)
         out["mult"] = F.log_softmax(self.mult(h), 1)
-        out["crystal_max"] = F.log_softmax(self.cmax(h), 1)
+        allc = self.crystal_emb(torch.arange(N_CRYSTALS))
+        lq = self.cmax_q(torch.cat([h[:, None].expand(B, N_CRYSTALS, -1), allc[None].expand(B, -1, -1)], -1))
+        out["crystal_max"] = F.log_softmax(torch.cat([lq.squeeze(-1), self.cmax_other(h)], 1), 1)
         return out
 
 

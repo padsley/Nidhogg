@@ -2,7 +2,7 @@
 """Generate one training-set shard on the cluster.
 
   python3 scripts/make_trainset_shard.py PACKED_LIB OUT_DIR SHARD_INDEX
-        [--n-samples 400] [--n-events 20000] [--response responses/s1805.yaml]
+        [--n-samples 400] [--n-events 100000] [--response responses/s1805.yaml]
 
 Samples are drawn with seed = SHARD_INDEX and processed in (beta, z) order
 so consecutive samples reuse the same library parts. Writes
@@ -30,7 +30,7 @@ def main() -> int:
     ap.add_argument("out_dir")
     ap.add_argument("shard", type=int)
     ap.add_argument("--n-samples", type=int, default=400)
-    ap.add_argument("--n-events", type=int, default=20000)
+    ap.add_argument("--n-events", type=int, default=100000)
     ap.add_argument("--response", default=os.path.join(os.path.dirname(__file__), "..", "responses", "s1805.yaml"))
     a = ap.parse_args()
     out = os.path.join(a.out_dir, f"shard_{a.shard:05d}.npz")

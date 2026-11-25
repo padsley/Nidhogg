@@ -48,6 +48,35 @@ def load_shards(files):
             {h: np.concatenate(v) for h, v in t.items()}, meta)
 
 
+def load_cached(shard_dir, val_frac, max_shards=None):
+    """Consolidate shards once into SHARD_DIR/cache/{train,val}_*.npy and
+    memory-map them. Several training processes (ensemble members) then
+    share one copy through the OS page cache instead of each holding the
+    full set in RAM. Validation = the fixed last shards (shared by all
+    members)."""
+    cache = os.path.join(shard_dir, "cache")
+    done = os.path.join(cache, "DONE")
+    if not os.path.exists(done):
+        files = sorted(glob.glob(os.path.join(shard_dir, "shard_*.npz")))[:max_shards]
+        nval = max(1, int(round(val_frac * len(files))))
+        os.makedirs(cache, exist_ok=True)
+        for split, fl in [("train", files[:-nval]), ("val", files[-nval:])]:
+            g, ctx, t, meta = load_shards(fl)
+            np.save(os.path.join(cache, f"{split}_gammas.npy"), g)
+            np.save(os.path.join(cache, f"{split}_context.npy"), ctx)
+            for h, v in t.items():
+                np.save(os.path.join(cache, f"{split}_{h}.npy"), v)
+            del g, ctx, t
+        json.dump(dict(meta=meta, n_files=len(files), n_val_files=nval), open(os.path.join(cache, "meta.json"), "w"))
+        open(done, "w").close()
+    meta = json.load(open(os.path.join(cache, "meta.json")))["meta"]
+    out = []
+    for split in ("train", "val"):
+        ld = lambda n: np.load(os.path.join(cache, f"{split}_{n}.npy"), mmap_mode="r")  # noqa: E731
+        out.append((ld("gammas"), ld("context"), {h: ld(h) for h in HEADS}, meta))
+    return out
+
+
 def entropy(t):
     return -(t * np.log(np.clip(t, 1e-12, None))).sum(-1)
 
@@ -59,7 +88,7 @@ def evaluate(model, g, ctx, t, batch=256):
     n = len(g)
     for i in range(0, n, batch):
         sl = slice(i, i + batch)
-        out = model(torch.from_numpy(g[sl]), torch.from_numpy(ctx[sl]))
+        out = model(torch.from_numpy(np.ascontiguousarray(g[sl])), torch.from_numpy(np.ascontiguousarray(ctx[sl])))
         for h in HEADS:
             tt = t[h][sl].astype(np.float32)
             ce = -(tt * out[h].numpy()).sum(-1)
@@ -87,14 +116,9 @@ def main() -> int:
     rng = np.random.default_rng(a.seed)
     os.makedirs(a.out_dir, exist_ok=True)
 
-    files = sorted(glob.glob(os.path.join(a.shard_dir, "shard_*.npz")))[: a.max_shards]
-    nval = max(1, int(round(a.val_frac * len(files))))
-    # validation = fixed last shards (independent of seed, so ensemble members share it)
-    tr_files, va_files = files[:-nval], files[-nval:]
     t0 = time.time()
-    g, ctx, t, meta = load_shards(tr_files)
-    gv, ctxv, tv, _ = load_shards(va_files)
-    print(f"train {len(g)} samples ({len(tr_files)} shards), val {len(gv)}; load {time.time() - t0:.0f}s; "
+    (g, ctx, t, meta), (gv, ctxv, tv, _) = load_cached(a.shard_dir, a.val_frac, a.max_shards)
+    print(f"train {len(g)} samples, val {len(gv)} (memory-mapped cache); load {time.time() - t0:.0f}s; "
           f"response {meta['response']} ({meta['response_hash']})", flush=True)
 
     model = Emulator()
@@ -110,7 +134,8 @@ def main() -> int:
         for s in range(steps_per_epoch):
             idx = np.sort(perm[s * a.batch:(s + 1) * a.batch])
             crystals = torch.from_numpy(np.sort(rng.choice(N_CRYSTALS, a.crystals_per_step, replace=False)))
-            out = model(torch.from_numpy(g[idx]), torch.from_numpy(ctx[idx]), crystals=crystals)
+            out = model(torch.from_numpy(np.ascontiguousarray(g[idx])),
+                        torch.from_numpy(np.ascontiguousarray(ctx[idx])), crystals=crystals)
             tgt = {h: torch.from_numpy(t[h][idx].astype(np.float32)) for h in HEADS}
             loss, parts = loss_fn(out, tgt, crystals)
             opt.zero_grad()
