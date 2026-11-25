@@ -2,7 +2,9 @@
 """End-to-end test of a trained emulator against full Ancalagon validation
 runs (truth histograms from scripts/extract_val_histos.py).
 
-  python3 scripts/eval_val.py MODEL.pt VALHIST_DIR PMAPS_DIR [--out results.json]
+  python3 scripts/eval_val.py VALHIST_DIR PMAPS_DIR MODEL.pt [MODEL.pt ...] [--out results.json]
+
+With several models, the prediction is the ensemble mean of probabilities.
 
 For each run, the prediction (per generated event) is
     sum_paths P(path) * sum_z w(z) * S_NN(path, z, beta, p0, acceptance)
@@ -75,14 +77,17 @@ def deviance(n, mu, min_mu=5.0):
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("model")
     ap.add_argument("valhist")
     ap.add_argument("pmaps")
+    ap.add_argument("models", nargs="+")
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
     torch.set_num_threads(16)
-    model, ck = load_model(a.model)
-    print(f"model epoch {ck['epoch']}, response {ck['meta']['response']}")
+    models = []
+    for mp in a.models:
+        m, ck = load_model(mp)
+        models.append(m)
+        print(f"{mp}: epoch {ck['epoch']}, response {ck['meta']['response']}")
     res = []
     for f in sorted(glob.glob(os.path.join(a.valhist, "*.npz"))):
         name = os.path.basename(f)[:-4]
@@ -99,7 +104,9 @@ def main() -> int:
         N = float(d["n_events"])
         r = dict(run=name, n=N, recoil_frac=float(d["recoil_frac"]))
         for sel, acc in [("all", OPEN_ACCEPTANCE), ("gated", acc_g)]:
-            pred = predict_mixture(model, paths, d["path_prob"], zn, zw, float(d["beta"]), float(d["p0"]), acc)
+            preds = [predict_mixture(m, paths, d["path_prob"], zn, zw, float(d["beta"]), float(d["p0"]), acc)
+                     for m in models]
+            pred = {h: np.mean([q[h] for q in preds], 0) for h in HEADS}
             for h in HEADS:
                 dev, ndf = deviance(d[f"{sel}_{h}"], N * pred[h])
                 r[f"{sel}/{h}"] = (dev, ndf)

@@ -61,12 +61,21 @@ def load_cached(shard_dir, val_frac, max_shards=None):
         nval = max(1, int(round(val_frac * len(files))))
         os.makedirs(cache, exist_ok=True)
         for split, fl in [("train", files[:-nval]), ("val", files[-nval:])]:
-            g, ctx, t, meta = load_shards(fl)
-            np.save(os.path.join(cache, f"{split}_gammas.npy"), g)
-            np.save(os.path.join(cache, f"{split}_context.npy"), ctx)
-            for h, v in t.items():
-                np.save(os.path.join(cache, f"{split}_{h}.npy"), v)
-            del g, ctx, t
+            # stream shard by shard into preallocated .npy memmaps (peak RAM ~ one shard)
+            sizes = [len(np.load(f)["in_z"]) for f in fl]
+            mm, row = {}, 0
+            for f, n in zip(fl, sizes):
+                g, ctx, t, meta = load_shards([f])
+                parts = dict(gammas=g, context=ctx, **t)
+                for k, v in parts.items():
+                    if k not in mm:
+                        mm[k] = np.lib.format.open_memmap(os.path.join(cache, f"{split}_{k}.npy"), mode="w+",
+                                                          dtype=v.dtype, shape=(sum(sizes),) + v.shape[1:])
+                    mm[k][row:row + n] = v
+                row += n
+            for v in mm.values():
+                v.flush()
+            del mm
         json.dump(dict(meta=meta, n_files=len(files), n_val_files=nval), open(os.path.join(cache, "meta.json"), "w"))
         open(done, "w").close()
     meta = json.load(open(os.path.join(cache, "meta.json")))["meta"]
