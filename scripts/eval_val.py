@@ -58,9 +58,9 @@ def predict_mixture(model, paths, probs, z_nodes, z_w, beta, p0, acc):
     ctx = encode_context(Z, np.full(n, beta), np.full(n, p0), np.tile(acc, (n, 1)),
                          np.ones(n), np.zeros(n))
     out = {h: 0.0 for h in HEADS}
-    for i in range(0, n, 128):
-        o = model(torch.from_numpy(gam[i:i + 128]), torch.from_numpy(ctx[i:i + 128]))
-        w = torch.from_numpy(W[i:i + 128]).float()
+    for i in range(0, n, 32):
+        o = model(torch.from_numpy(gam[i:i + 32]), torch.from_numpy(ctx[i:i + 32]))
+        w = torch.from_numpy(W[i:i + 32]).float()
         for h in HEADS:
             p = torch.exp(o[h])
             ww = w.view(-1, *([1] * (p.dim() - 1)))

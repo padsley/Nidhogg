@@ -91,7 +91,7 @@ def entropy(t):
 
 
 @torch.no_grad()
-def evaluate(model, g, ctx, t, batch=256):
+def evaluate(model, g, ctx, t, batch=32):
     model.eval()
     kl = {h: 0.0 for h in HEADS}
     n = len(g)
