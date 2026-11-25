@@ -119,6 +119,9 @@ def main() -> int:
     ap.add_argument("--val-frac", type=float, default=0.05)
     ap.add_argument("--threads", type=int, default=16)
     ap.add_argument("--max-shards", type=int, default=None)
+    ap.add_argument("--no-doppler", dest="doppler", action="store_false",
+                    help="v1/v2 per-crystal decoder (unshifted references)")
+    ap.add_argument("--stop-after", type=int, default=None, help="stop after this many epochs (A/B tests)")
     a = ap.parse_args()
     torch.set_num_threads(a.threads)
     torch.manual_seed(a.seed)
@@ -130,14 +133,14 @@ def main() -> int:
     print(f"train {len(g)} samples, val {len(gv)} (memory-mapped cache); load {time.time() - t0:.0f}s; "
           f"response {meta['response']} ({meta['response_hash']})", flush=True)
 
-    model = Emulator()
+    model = Emulator(doppler=a.doppler)
     opt = torch.optim.AdamW(model.parameters(), lr=a.lr, weight_decay=1e-5)
     steps_per_epoch = len(g) // a.batch
     total = steps_per_epoch * a.epochs
     sched = torch.optim.lr_scheduler.LambdaLR(
         opt, lambda s: min(1.0, (s + 1) / 500) * 0.5 * (1 + math.cos(math.pi * min(s, total) / total)))
     hist, best = [], np.inf
-    for ep in range(a.epochs):
+    for ep in range(a.epochs if a.stop_after is None else min(a.epochs, a.stop_after)):
         perm = rng.permutation(len(g))
         t1, run = time.time(), []
         for s in range(steps_per_epoch):

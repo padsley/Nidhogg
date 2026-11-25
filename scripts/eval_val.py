@@ -36,7 +36,7 @@ HEADS = ["e_max", "e_sum", "mult", "crystal_max", "per_crystal"]
 
 def load_model(path):
     ck = torch.load(path, map_location="cpu", weights_only=False)
-    m = Emulator()
+    m = Emulator(doppler=ck.get("args", {}).get("doppler", False))
     m.load_state_dict(ck["state"])
     m.eval()
     return m, ck
